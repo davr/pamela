@@ -198,6 +198,6 @@ parse_params $@
 check_if_root
 check_if_arpscan_installed 
 scan
-translate
+#translate
 upload
 

@@ -59,7 +59,19 @@ where d.committime > strftime('%s','now') - ".DATA_TTL);
 		if($q) {
 			$row = $q->fetchArray(SQLITE3_ASSOC);
 			if($row && isset($row['name']) && strlen($row['name'])>2) {
-				$item = $row['name'];
+				$item2 = trim($row['name']);
+				if(preg_match("/^\(Unknown\)/", $item2)) {
+					$cmd = 'wget '.escapeshellarg("http://www.coffer.com/mac_find/?string=$item").' -O - -q|grep table2|tail -n1|sed -e \'s/<[^>]*>//g\'|tr "\t" " "|sed -e \'s/^ *//g\'';
+					$item3 = trim(shell_exec($cmd));
+					if(strlen($item3) > 3) {
+						map_add($item, "$item3"."[$item]", 15);
+						$item="$item3"."[$item]";
+					} else {
+						$item=$item2;
+					}
+				} else {
+					$item = $item2;
+				}
 			}
 		}
 		$r2[] = $item;

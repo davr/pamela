@@ -39,18 +39,33 @@ function data_check_table() {
 
   // create the table and remember...
   $table_exists =  $db->exec("create table data (data text unique on conflict replace, committime integer)");
+  $db->exec("create table mapping (data text, name text, priority integer)");
 }
 
 function data_get() {
 	$results = array();
   data_check_table(); 
 	$db = get_db();
-	$q = $db->query("select data from data where committime > strftime('%s','now') - ".DATA_TTL);
+	$q = $db->query("select d.data from data as d
+where d.committime > strftime('%s','now') - ".DATA_TTL);
 	if (!$q) return $results;
 	while($row = $q->fetchArray(SQLITE3_ASSOC)) {
 		$results[] = $row['data'];
 	}
-	return $results;
+	$r2 = array();
+	foreach($results as $item) {
+		$i = $db->escapeString($item);
+		$q = $db->query("select name from mapping where data = '".$i."' order by priority desc");
+		if($q) {
+			$row = $q->fetchArray(SQLITE3_ASSOC);
+			if($row && isset($row['name']) && strlen($row['name'])>2) {
+				$item = $row['name'];
+			}
+		}
+		$r2[] = $item;
+	}
+		
+	return $r2;
 }
 
 function data_add($data) {
@@ -59,6 +74,19 @@ function data_add($data) {
 	$data = $db->escapeString($data);
   #echo "insert or replace into data values (\"$data\", strftime('%s','now'))\n";
 	$result = $db->exec("insert or replace into data values (\"$data\", strftime('%s','now'))");
+  if (!$result)
+    echo "ERROR: ".$db->lastErrorMsg()."\n";
+}
+
+function map_add($data, $name, $pri) {
+	$db = get_db();
+  data_check_table(); 
+	$data = $db->escapeString($data);
+	$name = $db->escapeString($name);
+	$pri = intval($pri);
+  #echo "insert or replace into data values (\"$data\", strftime('%s','now'))\n";
+	$db->exec("delete from mapping where data='$data' AND priority=$pri");
+	$result = $db->exec("insert into mapping (data,name,priority) values ('$data', '$name', $pri)");
   if (!$result)
     echo "ERROR: ".$db->lastErrorMsg()."\n";
 }

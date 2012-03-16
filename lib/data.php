@@ -42,6 +42,28 @@ function data_check_table() {
   $db->exec("create table mapping (data text, name text, priority integer)");
 }
 
+function mac_owner_get($item) {
+	// first try coffer.com
+	$cmd = 'wget '.escapeshellarg("http://www.coffer.com/mac_find/?string=$item").' -O - -q|grep table2|tail -n1|sed -e \'s/<[^>]*>//g\'|tr "\t" " "|sed -e \'s/^ *//g\'';
+	$item3 = trim(shell_exec($cmd));
+	if(strlen($item3) > 3) {
+		map_add($item, "$item3", 15);
+		$item="$item3";
+	} else {
+		// if that fails (not found, site down, they blocked us, etc) try this guy:
+		$cmd = 'wget '.escapeshellarg("http://iphone.aruljohn.com/mac/mac.pl?mac=$item").' -O - -q|grep h2|tail -n1|sed -e \'s/.*<h2>\(.*\)<.h2>.*/\1/g\'';
+		$item3 = trim(shell_exec($cmd));
+		if(strlen($item3) > 3) {
+			map_add($item, "$item3", 15);
+			$item="$item3";
+		} else {
+			$item=substr($item,-7);
+		}
+	}
+
+	return $item;
+}
+
 function data_get() {
 	$results = array();
   data_check_table(); 
@@ -53,6 +75,9 @@ where d.committime > strftime('%s','now') - ".DATA_TTL);
 		$results[] = $row['data'];
 	}
 	$r2 = array();
+	if(isset($_GET['mac']))
+		$r2 = $results;
+	else
 	foreach($results as $item) {
 		$i = $db->escapeString($item);
 		$q = $db->query("select name from mapping where data = '".$i."' order by priority desc");
@@ -60,21 +85,25 @@ where d.committime > strftime('%s','now') - ".DATA_TTL);
 			$row = $q->fetchArray(SQLITE3_ASSOC);
 			if($row && isset($row['name']) && strlen($row['name'])>2) {
 				$item2 = trim($row['name']);
-				if(preg_match("/^\(Unknown\)/", $item2)) {
-					$cmd = 'wget '.escapeshellarg("http://www.coffer.com/mac_find/?string=$item").' -O - -q|grep table2|tail -n1|sed -e \'s/<[^>]*>//g\'|tr "\t" " "|sed -e \'s/^ *//g\'';
-					$item3 = trim(shell_exec($cmd));
-					if(strlen($item3) > 3) {
-						map_add($item, "$item3"."[$item]", 15);
-						$item="$item3"."[$item]";
-					} else {
-						$item=$item2;
-					}
+				// If we ended up with (Unknown), meaning no other data besides the mac addr,
+				// and the mac prefix wasn't in arp-scan's database, then we go hit up these
+				// online guys which have more up to date databases
+				if(preg_match("/^\(Unknown\)/", $item2) || preg_match("|^([0-9a-f][0-9a-f]:?){6,6}|", $item2)) {
+					$item = mac_owner_get($item);
+
+				// If we have a generic android_abcdef091234 (from DHCP requests)
+				// Then report back that it's android + the manufacturer
+				} else if(preg_match("/^a?A?ndroid_?-?[0-9a-f]*$/", $item2)) {
+					$mac = $item;
+					$item = "Android[".mac_owner_get($item)."]";
+					map_add($mac, $item, 18);
 				} else {
 					$item = $item2;
 				}
 			}
 		}
-		$r2[] = $item;
+		if(isset($_GET['all']) || $item[0] != ".")
+			$r2[] = $item;
 	}
 		
 	return $r2;

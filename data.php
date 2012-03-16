@@ -40,7 +40,7 @@ function multiply() {
 $data = data_get();
 if (count($data) > 0) {
 //multiply();
- echo('["'.implode('", "', $data).'"]');
+ echo('["'.implode('","', $data).'"]');
 } else {
  echo('[]');
 } 
